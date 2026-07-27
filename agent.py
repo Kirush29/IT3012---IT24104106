@@ -9,4 +9,4 @@ class GreedyGridAgent:
         # If standing directly on food, or just wander / move towards coordinates
         pos = percept['agent_pos']
         # Simple heuristic or fallback random sweep
-        return random.choice(self.actions_pool)
+        return random.choice(self.actions_pool)  

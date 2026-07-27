@@ -17,7 +17,7 @@ class GridHuntGame:
         self.score = 0
         self.steps = 0
 
-    def get_percept(self, agent) -> dict:
+    def get_percept(self, agent) -> dict:  
         return {
             'agent_pos': list(self.agent_pos),
             'smells_food': tuple(self.agent_pos) in self.food_positions,

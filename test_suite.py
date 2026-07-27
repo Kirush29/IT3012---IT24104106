@@ -12,7 +12,7 @@ class TestPractical1And2_ReflexAgents(unittest.TestCase):
         # Instantiate agents (assuming students have created these classes)
         try:
             self.simple_agent = SimpleReflexAgent()
-            self.model_agent = ModelBasedAgent()
+            self.model_agent = ModelBasedAgent() 
         except NameError:
             self.fail("Agent classes not found. Ensure SimpleReflexAgent and ModelBasedAgent are defined.")
 

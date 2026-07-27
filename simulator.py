@@ -4,7 +4,7 @@ from agent import GreedyGridAgent
 
 def run_grid_hunt():
     env = GridHuntGame()
-    agent = GreedyGridAgent()
+    agent = GreedyGridAgent()  
 
     print("=== UC Berkeley Style Small Grid Hunt Started ===")
     while not env.is_done():
