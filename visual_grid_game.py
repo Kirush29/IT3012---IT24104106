@@ -5,6 +5,50 @@ import tkinter as tk
 
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
+    # Add inside VisualGridHuntGame class
+
+    DIRECTIONS = ["Up", "Right", "Down", "Left"]
+
+    DIRECTION_VECTORS = {
+        "Up": (0, 1),
+        "Right": (1, 0),
+        "Down": (0, -1),
+        "Left": (-1, 0)
+    }
+    # Add inside VisualGridHuntGame class
+
+    def turn_direction(self, direction, turn):
+        index = self.DIRECTIONS.index(direction)
+
+        if turn == "left":
+            return self.DIRECTIONS[(index - 1) % 4]
+
+        if turn == "right":
+            return self.DIRECTIONS[(index + 1) % 4]
+
+        return direction
+
+
+    def adjacent_position(self, direction):
+        dx, dy = self.DIRECTION_VECTORS[direction]
+
+        return (
+            self.agent_pos[0] + dx,
+            self.agent_pos[1] + dy
+        )
+
+
+    def is_blocked(self, position):
+        x, y = position
+
+        return (
+            x < 0
+            or x >= self.width
+            or y < 0
+            or y >= self.height
+            or position in self.walls
+        )
+
 
     def __init__(self, width=10, height=10, num_food=10, num_opponents=2, custom_walls=None):
         self.width = width
@@ -16,6 +60,11 @@ class VisualGridHuntGame:
         else:
             # Generate some default scattered walls for a larger grid
             self.walls = {(2, 2), (2, 3), (5, 5), (6, 5), (3, 7)}
+
+        # Add inside VisualGridHuntGame.__init__()
+
+        self.agent_facing = "Up"
+        self.last_move_hit_wall = False
 
         # Dynamically generate random food positions avoiding walls and agent start
         self.food_positions = set()
@@ -54,61 +103,262 @@ class VisualGridHuntGame:
             ):
                 self.toxic_traps.add(trap_pos)
 
+  
+
     def get_percept(self) -> dict:
+        left_direction = self.turn_direction(
+            self.agent_facing,
+            "left"
+        )
+
+        right_direction = self.turn_direction(
+            self.agent_facing,
+            "right"
+        )
+
+        ahead_position = self.adjacent_position(
+            self.agent_facing
+        )
+
+        left_position = self.adjacent_position(
+            left_direction
+        )
+
+        right_position = self.adjacent_position(
+            right_direction
+        )
+
+        current_position = tuple(self.agent_pos)
+
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-             'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
-            'collision': self.collision,
-            'score': self.score,
-            'remaining_food': len(self.food_positions)
+            "wall_ahead": self.is_blocked(ahead_position),
+            "wall_left": self.is_blocked(left_position),
+            "wall_right": self.is_blocked(right_position),
+            "food_here": current_position in self.food_positions,
+            "toxin_here": current_position in self.toxic_traps,
+            "opponent_ahead": ahead_position in [
+                tuple(opponent) for opponent in self.opponents
+            ],
+            "last_move_hit_wall": self.last_move_hit_wall,
+            "collision": self.collision
         }
+
+        # Replace execute_action() with this
 
     def execute_action(self, action: str):
         self.steps += 1
-        new_pos = list(self.agent_pos)
+        self.last_move_hit_wall = False
 
-        if action == 'Up':
-            new_pos[1] = min(self.height - 1, new_pos[1] + 1)
-        elif action == 'Down':
-            new_pos[1] = max(0, new_pos[1] - 1)
-        elif action == 'Left':
-            new_pos[0] = max(0, new_pos[0] - 1)
-        elif action == 'Right':
-            new_pos[0] = min(self.width - 1, new_pos[0] + 1)
+        if action == "TurnLeft":
+            self.agent_facing = self.turn_direction(
+                self.agent_facing,
+                "left"
+            )
 
-        if tuple(new_pos) in self.walls:
-            self.score -= 5
-        else:
-            self.agent_pos = new_pos
+        elif action == "TurnRight":
+            self.agent_facing = self.turn_direction(
+                self.agent_facing,
+                "right"
+            )
 
-        tuple_pos = tuple(self.agent_pos)
-        if tuple_pos in self.food_positions:
-            self.food_positions.remove(tuple_pos)
-            self.score += 20
-            # Toxic trap penalty
-        if tuple_pos in self.toxic_traps:
-            self.score -= 15
+        elif action == "Forward":
+            next_position = self.adjacent_position(
+                self.agent_facing
+            )
 
-        for op in self.opponents:
-            move = random.choice(['Up', 'Down', 'Left', 'Right', 'Stay'])
-            if move == 'Up' and op[1] < self.height - 1:
-                op[1] += 1
-            elif move == 'Down' and op[1] > 0:
-                op[1] -= 1
-            elif move == 'Left' and op[0] > 0:
-                op[0] -= 1
-            elif move == 'Right' and op[0] < self.width - 1:
-                op[0] += 1
+            if self.is_blocked(next_position):
+                self.score -= 5
+                self.last_move_hit_wall = True
+            else:
+                self.agent_pos = [
+                    next_position[0],
+                    next_position[1]
+                ]
 
-            if op == self.agent_pos:
+                if tuple(self.agent_pos) in self.toxic_traps:
+                    self.score -= 15
+
+        elif action == "Eat":
+            current_position = tuple(self.agent_pos)
+
+            if current_position in self.food_positions:
+                self.food_positions.remove(current_position)
+                self.score += 20
+
+        for opponent in self.opponents:
+            move = random.choice(
+                ["Up", "Down", "Left", "Right", "Stay"]
+            )
+
+            if move == "Stay":
+                continue
+
+            dx, dy = self.DIRECTION_VECTORS[move]
+
+            new_position = (
+                opponent[0] + dx,
+                opponent[1] + dy
+            )
+
+            if not self.is_blocked(new_position):
+                opponent[0] = new_position[0]
+                opponent[1] = new_position[1]
+
+            if opponent == self.agent_pos:
                 self.score -= 50
                 self.collision = True
 
+            # Add before GridGameGUI class
+
+class ModelBasedAgent:
+
+    DIRECTIONS = ["Up", "Right", "Down", "Left"]
+
+    DIRECTION_VECTORS = {
+        "Up": (0, 1),
+        "Right": (1, 0),
+        "Down": (0, -1),
+        "Left": (-1, 0)
+    }
+
+    def __init__(self):
+        self.relative_position = (0, 0)
+        self.facing = "Up"
+        self.visited_cells = {(0, 0)}
+
+        self.last_action = None
+        self.last_percept = None
+
+    def turn_direction(self, direction, turn):
+        index = self.DIRECTIONS.index(direction)
+
+        if turn == "left":
+            return self.DIRECTIONS[(index - 1) % 4]
+
+        if turn == "right":
+            return self.DIRECTIONS[(index + 1) % 4]
+
+        return direction
+
+    def relative_neighbour(self, direction):
+        dx, dy = self.DIRECTION_VECTORS[direction]
+
+        return (
+            self.relative_position[0] + dx,
+            self.relative_position[1] + dy
+        )
+
+    def update_internal_state(self, percept):
+        if self.last_action == "TurnLeft":
+            self.facing = self.turn_direction(
+                self.facing,
+                "left"
+            )
+
+        elif self.last_action == "TurnRight":
+            self.facing = self.turn_direction(
+                self.facing,
+                "right"
+            )
+
+        elif self.last_action == "Forward":
+            movement_succeeded = (
+                self.last_percept is not None
+                and not self.last_percept["wall_ahead"]
+                and not percept["last_move_hit_wall"]
+            )
+
+            if movement_succeeded:
+                self.relative_position = (
+                    self.relative_neighbour(self.facing)
+                )
+
+        self.visited_cells.add(
+            self.relative_position
+        )
+
+    def sense_and_act(self, percept):
+        self.update_internal_state(percept)
+
+        if percept["food_here"]:
+            action = "Eat"
+
+        elif percept["opponent_ahead"]:
+            action = "TurnRight"
+
+        else:
+            left_direction = self.turn_direction(
+                self.facing,
+                "left"
+            )
+
+            right_direction = self.turn_direction(
+                self.facing,
+                "right"
+            )
+
+            forward_cell = self.relative_neighbour(
+                self.facing
+            )
+
+            left_cell = self.relative_neighbour(
+                left_direction
+            )
+
+            right_cell = self.relative_neighbour(
+                right_direction
+            )
+
+            if (
+                not percept["wall_ahead"]
+                and forward_cell not in self.visited_cells
+            ):
+                action = "Forward"
+
+            elif (
+                not percept["wall_left"]
+                and left_cell not in self.visited_cells
+            ):
+                action = "TurnLeft"
+
+            elif (
+                not percept["wall_right"]
+                and right_cell not in self.visited_cells
+            ):
+                action = "TurnRight"
+
+            elif not percept["wall_ahead"]:
+                action = "Forward"
+
+            elif not percept["wall_right"]:
+                action = "TurnRight"
+
+            else:
+                action = "TurnLeft"
+
+        self.last_action = action
+        self.last_percept = dict(percept)
+
+        return action
+
     def is_done(self) -> bool:
         return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
+
+    # Add before GridGameGUI class
+
+class SimpleReflexAgent:
+
+    def sense_and_act(self, percept):
+        if percept["food_here"]:
+            return "Eat"
+
+        if percept["opponent_ahead"]:
+            return "TurnRight"
+
+        if percept["wall_ahead"]:
+            return "TurnLeft"
+
+        return "Forward"
 
 
 class GridGameGUI:
@@ -120,7 +370,7 @@ class GridGameGUI:
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
-
+        self.agent = SimpleReflexAgent()
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
         self.cell_size = max(20, min(max_canvas_dim // self.env.width, max_canvas_dim // self.env.height))
@@ -198,7 +448,10 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+               # With these lines
+
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
                 self.env.execute_action(action)
 
                 self.draw_grid()
